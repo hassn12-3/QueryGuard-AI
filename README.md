@@ -15,37 +15,65 @@
 
 ---
 
-## Architecture
+## 🏛️ Multi-Agent System Architecture
 
+```mermaid
+flowchart TD
+    %% Custom Styling
+    classDef client fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#ffffff;
+    classDef agent fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#ffffff;
+    classDef guard fill:#451a03,stroke:#f59e0b,stroke-width:2px,color:#ffffff;
+    classDef exec fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#ffffff;
+    classDef sandbox fill:#3b0764,stroke:#c084fc,stroke-width:2px,color:#ffffff;
+    classDef ui fill:#1e293b,stroke:#94a3b8,stroke-width:2px,color:#ffffff;
+    classDef decision fill:#312e81,stroke:#a5b4fc,stroke-width:2px,color:#ffffff;
+
+    User(["👤 Natural Language User Prompt"]):::client --> UI_Chat["🖥️ Next.js Split-Pane Chat Interface"]:::ui
+    UI_Chat -->|"POST /api/chat/stream (SSE Stream)"| SchemaNode
+
+    subgraph LangGraph_Core ["🛡️ LangGraph Autonomous Multi-Agent State Machine"]
+        direction TB
+
+        subgraph Phase1 ["Phase 1: Dynamic Discovery & Synthesis"]
+            SchemaNode["<b>Agent 1: Schema & Metric Pruner</b><br/>• Tokenizes query & computes relevance scores<br/>• Injects foreign keys & pruned DDL to eliminate bloat"]:::agent
+            SchemaNode --> GenNode["<b>Agent 2: SQL Synthesizer</b><br/>• Translates prompt into SQLite SELECT<br/>• Multi-Key Gemini rotation + Groq failover"]:::agent
+        end
+
+        subgraph Phase2 ["Phase 2: AST Security Firewall & Self-Healing"]
+            GenNode --> ValidateNode["<b>Agent 3: AST Security Firewall</b><br/>• sqlglot Abstract Syntax Tree analysis<br/>• Enforces SELECT only (blocks DROP, UPDATE, DELETE)<br/>• Injects automatic LIMIT clause"]:::guard
+            ValidateNode --> ASTCheck{"AST Valid?"}:::decision
+            ASTCheck -- "❌ Syntax Error / Mutation Detected" --> Heal_AST["<b>Self-Healing Supervisor</b><br/>• Extracts stack trace & syntax error<br/>• Re-prompts Synthesizer (Retry ≤ 3)"]:::guard
+            Heal_AST --> GenNode
+        end
+
+        subgraph Phase3 ["Phase 3: Database Execution & Dialect Recovery"]
+            ASTCheck -- "✅ Valid Read-Only SELECT" --> ExecNode["<b>Execution Engine</b><br/>• Executes SQL against local SQLite (analytics.db)<br/>• Traps dialect & operational exceptions"]:::exec
+            ExecNode --> ExecCheck{"DB Execution?"}:::decision
+            ExecCheck -- "❌ OperationalError / Failed" --> Heal_DB["<b>Dialect Healer</b><br/>• Packages runtime DB error message<br/>• Re-routes to Synthesizer with feedback"]:::guard
+            Heal_DB --> GenNode
+        end
+
+        subgraph Phase4 ["Phase 4: Advanced Python Analytics & Executive Insights"]
+            ExecCheck -- "✅ Success (Records Returned)" --> NeedStats{"Requires Stats / Forecast?"}:::decision
+            NeedStats -- "Yes (Trends / Predict / Correlation)" --> PythonNode["<b>Agent 5: Python Sandbox Engine</b><br/>• Secure sandboxed runner (No FS / Network)<br/>• Computes Pandas, SciPy, Statsmodels regressions"]:::sandbox
+            NeedStats -- "No (Standard Aggregate / List)" --> InsightNode
+            PythonNode --> InsightNode["<b>Agent 6: Insight & Plotly Synthesizer</b><br/>• Produces boardroom-ready executive takeaways<br/>• Generates responsive Plotly spec (Dark/Light)"]:::agent
+        end
+    end
+
+    InsightNode -->|"Server-Sent Events (SSE)"| UI_Dashboard["📊 Next.js Split-Pane Dashboard<br/>• Live Node-by-Node Pipeline Progress Bar<br/>• Interactive Plotly Visualizations<br/>• Paginated Sortable Data Table"]:::ui
 ```
-User Query
-    │
-    ▼
-┌─────────────────────────────────────────────────────────────┐
-│                 LangGraph Multi-Agent Engine                │
-│                                                             │
-│   retrieve_schema ──► generate_sql                          │
-│                             │                               │
-│                         validate_sql (AST Guard)            │
-│                          ┌──┴──┐                            │
-│                       error   ok                            │
-│                          │     │                            │
-│                 (retry≤3)│  execute_sql                     │
-│                          │     │                            │
-│               generate_sql◄─error  ok                       │
-│                                 │                           │
-│                        advanced_analysis (Python Sandbox)   │
-│                                 │                           │
-│                       synthesize_insights                   │
-└─────────────────────────────────────────────────────────────┘
-    │
-    ▼  Server-Sent Events (FastAPI → Next.js)
-┌─────────────────────────────────────────────────────────────┐
-│                    Next.js Split-Pane UI                    │
-│   Left: Interactive Chat + Prompt Suggestions               │
-│   Right: Live Pipeline Progress Bar / Chart / Data Table    │
-└─────────────────────────────────────────────────────────────┘
-```
+
+### 🧩 Collaborative Agent Network
+
+| Agent Node | Core Responsibility | Security & Reliability Guarantee |
+|:---|:---|:---|
+| **`retrieve_schema_node`** | Fuzzy-tokenizes query; extracts top relevant tables & DDL foreign keys. | Prevents prompt bloat and eliminates schema hallucination. |
+| **`generate_sql_node`** | Translates natural language into SQLite dialect SQL with alias precision. | Resilient multi-key round-robin rotation + Groq 70B failover. |
+| **`validate_sql_node`** | Parses query AST (`sqlglot`); blocks any mutation statement or subquery. | **Deterministic Zero-Trust:** Mathematical guarantee against `DROP`, `DELETE`, `UPDATE`. |
+| **`execute_sql_node`** | Executes validated queries against `analytics.db` and packages results. | Dialect error trapping; routes runtime failures back to self-healing loop. |
+| **`advanced_analysis_node`** | Automatically detects statistical questions (correlations, predictions, regressions). | **Sandboxed Python execution:** Pandas, SciPy, Statsmodels with zero network/disk access. |
+| **`synthesize_insights_node`** | Builds executive plain-English findings + JSON Plotly visualization spec. | Boardroom-ready takeaways with dynamic chart layout matching dark/light themes. |
 
 ---
 
