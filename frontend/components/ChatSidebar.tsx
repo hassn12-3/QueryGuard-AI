@@ -14,6 +14,10 @@ import {
   CreditCard,
   LifeBuoy,
   CornerDownLeft,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import type { Message } from "@/app/page";
 
@@ -79,7 +83,13 @@ const CATEGORIES: QueryCategory[] = [
 
 // ── Message Bubble ────────────────────────────────────────────────────────────
 
-function MessageBubble({ message }: { message: Message }) {
+interface MessageBubbleProps {
+  message: Message;
+  isSpeaking: boolean;
+  onToggleSpeech: (id: string, text: string) => void;
+}
+
+function MessageBubble({ message, isSpeaking, onToggleSpeech }: MessageBubbleProps) {
   const [showSql, setShowSql] = useState(false);
   const isUser = message.role === "user";
 
@@ -117,30 +127,58 @@ function MessageBubble({ message }: { message: Message }) {
           )}
         </div>
 
-        {/* Result Metadata Badge & SQL View */}
-        {message.result && (
-          <div className="flex flex-wrap items-center gap-2 px-1 mt-0.5">
-            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/60 px-2 py-0.5 rounded-full border border-slate-200/60 dark:border-slate-700/50">
-              {message.result.row_count.toLocaleString()} rows
-            </span>
-            {message.result.retry_count > 0 && (
-              <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
-                {message.result.retry_count} self-heal
+        {/* Result Metadata Badge, Speaker Audio & SQL View */}
+        <div className="flex flex-wrap items-center gap-2 px-1 mt-0.5">
+          {/* Audio Explanation Button for AI Responses */}
+          {!isUser && message.content && (
+            <button
+              id={`speak-msg-${message.id}`}
+              onClick={() => onToggleSpeech(message.id, message.content)}
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium transition-all ${
+                isSpeaking
+                  ? "bg-rose-500/15 text-rose-500 border border-rose-500/30 animate-pulse font-semibold"
+                  : "bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 border border-slate-200/80 dark:border-slate-700/60"
+              }`}
+              title={isSpeaking ? "Stop Voice Explanation" : "Listen to Explanation"}
+            >
+              {isSpeaking ? (
+                <>
+                  <VolumeX className="w-3 h-3 text-rose-500" />
+                  <span>Stop</span>
+                </>
+              ) : (
+                <>
+                  <Volume2 className="w-3 h-3 text-indigo-500" />
+                  <span>Explain</span>
+                </>
+              )}
+            </button>
+          )}
+
+          {message.result && (
+            <>
+              <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/60 px-2 py-0.5 rounded-full border border-slate-200/60 dark:border-slate-700/50">
+                {message.result.row_count.toLocaleString()} rows
               </span>
-            )}
-            {message.result.generated_sql && (
-              <button
-                id={`toggle-sql-${message.id}`}
-                onClick={() => setShowSql((v) => !v)}
-                className="text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1 transition-colors"
-              >
-                <Code2 className="w-3 h-3" />
-                {showSql ? "Hide SQL" : "View SQL"}
-                <ChevronDown className={`w-3 h-3 transition-transform ${showSql ? "rotate-180" : ""}`} />
-              </button>
-            )}
-          </div>
-        )}
+              {message.result.retry_count > 0 && (
+                <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                  {message.result.retry_count} self-heal
+                </span>
+              )}
+              {message.result.generated_sql && (
+                <button
+                  id={`toggle-sql-${message.id}`}
+                  onClick={() => setShowSql((v) => !v)}
+                  className="text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1 transition-colors"
+                >
+                  <Code2 className="w-3 h-3" />
+                  {showSql ? "Hide SQL" : "View SQL"}
+                  <ChevronDown className={`w-3 h-3 transition-transform ${showSql ? "rotate-180" : ""}`} />
+                </button>
+              )}
+            </>
+          )}
+        </div>
 
         {/* Inline SQL Viewer */}
         {showSql && message.result?.generated_sql && (
@@ -170,8 +208,112 @@ export default function ChatSidebar({
 }: ChatSidebarProps) {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("revenue");
+  const [isListening, setIsListening] = useState(false);
+  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
+
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef = useRef<any>(null);
+
+  // ── Speech Synthesis (Text-to-Speech) ───────────────────────────────────────
+  const toggleSpeech = useCallback((msgId: string, text: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      alert("Speech synthesis is not supported in this browser.");
+      return;
+    }
+
+    if (speakingMsgId === msgId) {
+      window.speechSynthesis.cancel();
+      setSpeakingMsgId(null);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+
+    // Strip code blocks and markdown syntax for clean, pleasant voice narration
+    const cleanText = text
+      .replace(/```[\s\S]*?```/g, "")
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/[#*_~>]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!cleanText) return;
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+
+    utterance.onend = () => setSpeakingMsgId(null);
+    utterance.onerror = () => setSpeakingMsgId(null);
+
+    setSpeakingMsgId(msgId);
+    window.speechSynthesis.speak(utterance);
+  }, [speakingMsgId]);
+
+  // Clean up speech on unmount
+  useEffect(() => {
+    return () => {
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  // ── Speech Recognition (Voice-to-Text Microphone) ──────────────────────────
+  const toggleListening = useCallback(() => {
+    if (isListening) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert("Voice-to-Text is supported in Google Chrome, Microsoft Edge, and Safari.");
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        let transcript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        if (transcript.trim()) {
+          setQuery((prev) => (prev ? `${prev} ${transcript}` : transcript));
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn("Speech recognition error:", event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.error("Failed to start speech recognition:", err);
+      setIsListening(false);
+    }
+  }, [isListening]);
 
   // Smooth scroll contained strictly inside the chat container so screen position is never shifted
   useEffect(() => {
@@ -290,7 +432,14 @@ export default function ChatSidebar({
             </div>
           </div>
         ) : (
-          messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)
+          messages.map((msg) => (
+            <MessageBubble
+              key={msg.id}
+              message={msg}
+              isSpeaking={speakingMsgId === msg.id}
+              onToggleSpeech={toggleSpeech}
+            />
+          ))
         )}
       </div>
 
@@ -315,12 +464,36 @@ export default function ChatSidebar({
           </div>
         )}
 
+        {/* Listening Indicator Banner */}
+        {isListening && (
+          <div className="flex items-center gap-2 mb-2 px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/25 text-rose-600 dark:text-rose-400 text-xs font-semibold animate-pulse">
+            <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+            <span>Listening to your voice… Speak now!</span>
+          </div>
+        )}
+
         <div className="flex gap-2 items-end">
+          {/* Microphone Voice-to-Text Button (ChatGPT style) */}
+          <button
+            id="mic-button"
+            type="button"
+            onClick={toggleListening}
+            disabled={isStreaming}
+            className={`flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-all ${
+              isListening
+                ? "bg-rose-500 text-white shadow-lg shadow-rose-500/30 ring-2 ring-rose-400 animate-pulse"
+                : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700/80"
+            }`}
+            title={isListening ? "Listening... Click to stop" : "Voice-to-Text (Microphone)"}
+          >
+            {isListening ? <MicOff className="w-4 h-4 text-white" /> : <Mic className="w-4 h-4 text-slate-600 dark:text-slate-300" />}
+          </button>
+
           <textarea
             ref={textareaRef}
             id="query-input"
             className="flex-1 px-3.5 py-2.5 text-sm rounded-xl border bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all resize-none min-h-[44px] max-h-[120px]"
-            placeholder="Ask a question about customers, orders, subscriptions… (Enter to send)"
+            placeholder={isListening ? "Listening to your voice..." : "Ask a question about customers, orders, subscriptions…"}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -351,7 +524,7 @@ export default function ChatSidebar({
         </div>
 
         <div className="flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500 mt-2 px-1">
-          <span>{isStreaming ? "Generating answer…" : "Ready"}</span>
+          <span>{isStreaming ? "Generating answer…" : isListening ? "Transcribing speech…" : "Ready"}</span>
           <span>Shift+Enter for newline</span>
         </div>
       </div>

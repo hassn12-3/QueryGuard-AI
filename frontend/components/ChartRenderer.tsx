@@ -195,6 +195,28 @@ export default function ChartRenderer({ spec, sql, theme = "dark" }: ChartRender
   const themeDefaults = theme === "light" ? LIGHT_LAYOUT_DEFAULTS : DARK_LAYOUT_DEFAULTS;
   const mergedLayout = deepMerge(themeDefaults, rawLayout);
 
+  // CRITICAL FIX: Eliminate fixed dimensions from LLM and force true responsive fluid sizing
+  const responsiveLayout = {
+    ...mergedLayout,
+    autosize: true,
+  } as Record<string, unknown>;
+  delete responsiveLayout.width;
+  delete responsiveLayout.height;
+
+  // Trigger resize events on mount and when spec changes to force Plotly to measure full container width
+  useEffect(() => {
+    const trigger = () => window.dispatchEvent(new Event("resize"));
+    trigger();
+    const t1 = setTimeout(trigger, 50);
+    const t2 = setTimeout(trigger, 250);
+    const t3 = setTimeout(trigger, 600);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [spec, isFullscreen]);
+
   const handleCopy = () => {
     navigator.clipboard.writeText(sql);
     setCopied(true);
@@ -203,8 +225,8 @@ export default function ChartRenderer({ spec, sql, theme = "dark" }: ChartRender
 
   return (
     <>
-      {/* ── Normal Chart View ── */}
-      <div className="flex flex-col h-full bg-white dark:bg-slate-950 transition-colors">
+      {/* ── Normal Chart View: Fully Adjustable & Fluid ── */}
+      <div className="flex flex-col h-full w-full bg-white dark:bg-slate-950 transition-colors">
         {/* Top Control Bar with Fullscreen Button */}
         <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40">
           <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
@@ -220,11 +242,14 @@ export default function ChartRenderer({ spec, sql, theme = "dark" }: ChartRender
           </button>
         </div>
 
-        {/* Chart area */}
-        <div className="flex-1 overflow-hidden p-2 min-h-0">
+        {/* Chart area: full width & height */}
+        <div
+          id="plotly-chart-container"
+          className="flex-1 w-full h-full min-h-0 p-3 overflow-hidden relative flex items-center justify-center"
+        >
           <Plot
             data={rawData}
-            layout={mergedLayout as Partial<Plotly.Layout>}
+            layout={responsiveLayout as Partial<Plotly.Layout>}
             config={{
               responsive: true,
               displayModeBar: true,
@@ -232,11 +257,12 @@ export default function ChartRenderer({ spec, sql, theme = "dark" }: ChartRender
               displaylogo: false,
               toImageButtonOptions: {
                 format: "png",
-                filename: "datamind_chart",
+                filename: "queryguard_chart",
                 scale: 2,
               },
             }}
-            style={{ width: "100%", height: "100%" }}
+            className="w-full h-full"
+            style={{ width: "100%", height: "100%", minHeight: "350px" }}
             useResizeHandler
           />
         </div>

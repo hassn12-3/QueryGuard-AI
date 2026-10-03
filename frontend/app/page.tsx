@@ -9,12 +9,17 @@ import {
   BarChart3,
   Table as TableIcon,
   RotateCcw,
+  Volume2,
+  VolumeX,
+  FileDown,
+  Loader2,
 } from "lucide-react";
 import ChatSidebar from "@/components/ChatSidebar";
 import ChartRenderer from "@/components/ChartRenderer";
 import DataTable from "@/components/DataTable";
 import WelcomeCanvas from "@/components/WelcomeCanvas";
 import PipelineProgressBar from "@/components/PipelineProgressBar";
+import { generatePDFReport } from "@/lib/pdfReport";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -52,6 +57,9 @@ export default function Home() {
   const [liveTrace, setLiveTrace] = useState<TraceStep[]>([]);
   const [rightTab, setRightTab] = useState<"chart" | "table">("chart");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [activeQuery, setActiveQuery] = useState<string>("");
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isSpeakingSummary, setIsSpeakingSummary] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   // ── Theme initialization ───────────────────────────────────────────────────
@@ -84,10 +92,69 @@ export default function Home() {
     });
   }, []);
 
+  // ── Handlers for Speech & PDF ───────────────────────────────────────────────
+
+  const handleToggleSpeechSummary = useCallback(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      alert("Speech synthesis is not supported in this browser.");
+      return;
+    }
+
+    if (isSpeakingSummary) {
+      window.speechSynthesis.cancel();
+      setIsSpeakingSummary(false);
+      return;
+    }
+
+    if (!activeResult?.analysis_summary) return;
+
+    window.speechSynthesis.cancel();
+
+    const clean = activeResult.analysis_summary
+      .replace(/```[\s\S]*?```/g, "")
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/[#*_~>]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const utterance = new SpeechSynthesisUtterance(clean);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+
+    utterance.onend = () => setIsSpeakingSummary(false);
+    utterance.onerror = () => setIsSpeakingSummary(false);
+
+    setIsSpeakingSummary(true);
+    window.speechSynthesis.speak(utterance);
+  }, [isSpeakingSummary, activeResult]);
+
+  const handleDownloadPdf = useCallback(async () => {
+    if (!activeResult) return;
+    setIsExportingPdf(true);
+    try {
+      await generatePDFReport({
+        userQuery: activeQuery || "Business Analytics Query",
+        summary: activeResult.analysis_summary,
+        sql: activeResult.generated_sql,
+        rowCount: activeResult.row_count,
+        retryCount: activeResult.retry_count,
+        rows: activeResult.query_result,
+        chartElementId: "plotly-chart-container",
+      });
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      alert("Failed to generate PDF. Please try again.");
+    } finally {
+      setIsExportingPdf(false);
+    }
+  }, [activeResult, activeQuery]);
+
   // ── Submit Query ────────────────────────────────────────────────────────────
 
   const handleSubmit = useCallback(async (query: string) => {
     if (!query.trim() || isStreaming) return;
+
+    setActiveQuery(query.trim());
 
     const userMsg: Message = {
       id: crypto.randomUUID(),
@@ -355,7 +422,31 @@ export default function Home() {
                           <h2 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">
                             Executive Insight
                           </h2>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2.5">
+                            {/* Audio Explanation Button */}
+                            <button
+                              id="speak-executive-summary"
+                              onClick={handleToggleSpeechSummary}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-semibold transition-all ${
+                                isSpeakingSummary
+                                  ? "bg-rose-500 text-white shadow-sm shadow-rose-500/30 animate-pulse"
+                                  : "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200/80 dark:border-indigo-800/60"
+                              }`}
+                              title={isSpeakingSummary ? "Stop Voice Explanation" : "Listen to Explanation (Audio)"}
+                            >
+                              {isSpeakingSummary ? (
+                                <>
+                                  <VolumeX className="w-3.5 h-3.5" />
+                                  <span>Stop Audio</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Volume2 className="w-3.5 h-3.5" />
+                                  <span>Listen</span>
+                                </>
+                              )}
+                            </button>
+
                             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                               <span className="text-slate-900 dark:text-slate-200 font-bold">
                                 {activeResult.row_count.toLocaleString()}
@@ -410,14 +501,36 @@ export default function Home() {
                   </button>
                 </div>
 
-                {/* Reset to Database Overview Button */}
-                <button
-                  onClick={() => setActiveResult(null)}
-                  className="text-xs text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 inline-flex items-center gap-1 pb-1 transition-colors font-medium"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>Overview</span>
-                </button>
+                {/* Right Tab Controls: Export PDF Report & Overview */}
+                <div className="flex items-center gap-2 pb-1">
+                  <button
+                    id="download-pdf-report-btn"
+                    onClick={handleDownloadPdf}
+                    disabled={isExportingPdf}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200/80 dark:border-indigo-800/60 transition-all shadow-sm disabled:opacity-50"
+                    title="Download Executive PDF Report with Visualisation"
+                  >
+                    {isExportingPdf ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Generating PDF…</span>
+                      </>
+                    ) : (
+                      <>
+                        <FileDown className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>Export PDF Report</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => setActiveResult(null)}
+                    className="text-xs text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 inline-flex items-center gap-1 transition-colors font-medium ml-1"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Overview</span>
+                  </button>
+                </div>
               </div>
 
               {/* Tab Content Panel */}

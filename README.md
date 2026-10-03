@@ -8,8 +8,11 @@
 
 - **🛡️ Deterministic AST-Level Security Firewall (`sqlglot`):** Unlike naive prompt-only guardrails, QueryGuard parses Abstract Syntax Trees to guarantee 100% read-only safety. Blocks destructive mutations (`DROP`, `DELETE`, `UPDATE`, `ALTER`, `TRUNCATE`, `REPLACE`, `MERGE`), detects dangerous nested subqueries, and injects protective row limits.
 - **🔄 Closed-Loop Autonomous Self-Healing:** Powered by a cyclic LangGraph state machine. When AST validation catches syntax ambiguities or SQLite raises runtime dialect errors, the agent diagnoses the stack trace and autonomously repairs the query (up to 3 iterations) without human intervention.
+- **🎙️ Voice-to-Text Dictation (ChatGPT-Style Mic):** Allows stakeholders to speak questions naturally using browser speech recognition with real-time audio wave feedback.
+- **🔊 Natural Voice Explanation (Text-to-Speech):** One-click speaker audio to listen to natural language explanations of data findings and chart insights.
+- **📄 Executive PDF Report Generation:** Instantly exports a boardroom-ready PDF document including query details, executive takeaways, high-resolution chart snapshots, verified SQL, and tabular audit records.
 - **📊 Sandboxed Python Statistical Engine:** When queries demand predictive analytics, forecasting, or correlation, the pipeline dynamically launches a secure sandboxed execution environment with Pandas, NumPy, SciPy, and Statsmodels.
-- **📈 Interactive Plotly Dashboards & Executive Insights:** Generates boardroom-ready executive summaries alongside responsive Plotly charts (dark/light theme) and paginated data tables.
+- **📈 Fluid, Responsive Plotly Visualizations:** Dynamically adapts to 100% of container width in both split-pane view and immersive fullscreen mode.
 - **⚡ Real-Time Multi-Agent Live Trace:** FastAPI Server-Sent Events (SSE) stream the real-time status of each agent node (`retrieve_schema` → `generate_sql` → `validate_sql` → `execute_sql` → `advanced_analysis` → `synthesize_insights`) directly to the Next.js UI.
 - **🔑 Resilient Multi-Key Failover:** Load-balances across Gemini API keys with instant fallback to Groq (`llama-3.3-70b-versatile`) on rate limits or quotas.
 
