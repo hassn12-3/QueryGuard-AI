@@ -17,23 +17,51 @@ from app.graph import build_graph
 from app.state import AgentState
 
 
+from app.db.seed_mock_data import seed_database
+
+
 # ── Application ─────────────────────────────────────────────────────────────
 
 app = FastAPI(
-    title="Multi-Agent Text-to-SQL API",
-    description="LangGraph-powered natural language to SQL with advanced analytics",
+    title="QueryGuard AI API",
+    description="Autonomous Multi-Agent BI Copilot with AST Security & Self-Healing SQL",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[settings.FRONTEND_ORIGIN, "http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Robust CORS configuration supporting local dev and cloud deployments (Render, Vercel)
+_configured_origins = [o.strip() for o in settings.FRONTEND_ORIGIN.split(",") if o.strip()]
+_cors_origins = list(set(_configured_origins + [
+    "http://localhost:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:8000",
+]))
+
+if "*" in _configured_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_origin_regex=r"https://.*\.onrender\.com|https://.*\.vercel\.app",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Ensure mock SQLite database is seeded whenever server boots up."""
+    seed_database()
 
 
 # ── Schema ───────────────────────────────────────────────────────────────────

@@ -171,39 +171,49 @@ The UI will be available at **http://localhost:3000**
 ## Project Structure
 
 ```
-├── .env.example
-├── README.md
-├── backend/
-│   ├── requirements.txt
-│   ├── run.py
-│   ├── main.py
-│   └── app/
-│       ├── config.py
-│       ├── state.py
-│       ├── graph.py
-│       ├── nodes/
-│       │   ├── schema_retriever.py
-│       │   ├── sql_generator.py
-│       │   ├── sql_validator.py
-│       │   ├── db_executor.py
-│       │   ├── advanced_analyzer.py
-│       │   └── insight_synthesizer.py
-│       ├── db/
-│       │   ├── connection.py
-│       │   └── seed_mock_data.py
-│       └── sandbox/
-│           └── runner.py
-└── frontend/
-    ├── package.json
-    ├── tailwind.config.js
-    ├── next.config.mjs
-    ├── app/
-    │   ├── layout.tsx
-    │   ├── page.tsx
-    │   └── globals.css
-    └── components/
-        ├── ChatSidebar.tsx
-        ├── TraceViewer.tsx
-        ├── ChartRenderer.tsx
-        └── DataTable.tsx
-```
+
+---
+
+## 🚀 Deploying to Render
+
+You can deploy the entire full-stack application (Backend FastAPI + Frontend Next.js) on **Render** in two ways:
+
+### Option A: Render Blueprints (1-Click Automated Setup)
+
+1. Log into your [Render Dashboard](https://dashboard.render.com).
+2. Click **New +** → **Blueprint**.
+3. Connect your GitHub repository: `https://github.com/hassn12-3/QueryGuard-AI`.
+4. Render will detect [`render.yaml`](./render.yaml) and automatically configure both services:
+   - `queryguard-backend` (Python web service)
+   - `queryguard-frontend` (Next.js web service)
+5. Fill in your environment variables when prompted (`GEMINI_API_KEY` or `GEMINI_API_KEYS`, `GROQ_API_KEY`).
+6. Click **Apply**. Both services will build and deploy!
+
+---
+
+### Option B: Manual Web Service Setup
+
+#### 1. Deploy the Backend (FastAPI)
+- **Type**: Web Service
+- **Root Directory**: `backend`
+- **Runtime**: `Python 3`
+- **Build Command**: `pip install --upgrade pip && pip install -r requirements.txt`
+- **Start Command**: `python run.py`
+- **Environment Variables**:
+  - `LLM_PROVIDER`: `gemini`
+  - `GEMINI_API_KEY`: *(your key)*
+  - `GEMINI_API_KEYS`: *(optional comma-separated keys for failover)*
+  - `GROQ_API_KEY`: *(optional Groq fallback)*
+  - `FRONTEND_ORIGIN`: `*`
+  - `DATABASE_PATH`: `analytics.db`
+
+#### 2. Deploy the Frontend (Next.js)
+- **Type**: Web Service
+- **Root Directory**: `frontend`
+- **Runtime**: `Node`
+- **Build Command**: `npm install && npm run build`
+- **Start Command**: `npm run start`
+- **Environment Variables**:
+  - `NEXT_PUBLIC_API_URL`: *(Your deployed Render backend URL, e.g. `https://queryguard-backend.onrender.com`)*
+  - `NODE_VERSION`: `18.20.0`
+
