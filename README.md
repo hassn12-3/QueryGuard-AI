@@ -197,9 +197,10 @@ You can deploy the entire full-stack application (Backend FastAPI + Frontend Nex
 - **Type**: Web Service
 - **Root Directory**: `backend`
 - **Runtime**: `Python 3`
-- **Build Command**: `pip install --upgrade pip && pip install -r requirements.txt`
+- **Build Command**: `pip install --upgrade pip setuptools wheel && pip install -r requirements.txt`
 - **Start Command**: `python run.py`
 - **Environment Variables**:
+  - `PYTHON_VERSION`: `3.11.9` *(Crucial: ensures pre-built binary wheels for scipy/numpy)*
   - `LLM_PROVIDER`: `gemini`
   - `GEMINI_API_KEY`: *(your key)*
   - `GEMINI_API_KEYS`: *(optional comma-separated keys for failover)*
